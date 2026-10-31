@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberSpoken AR - Next-Gen Pronunciation Lab</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@300;400;600;700&family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cyber: {
+                            dark: '#030712',
+                            panel: '#091122',
+                            cyan: '#00f0ff',
+                            magenta: '#ff007f',
+                            emerald: '#00ff9d',
+                            amber: '#ffb703',
+                            danger: '#ff3366',
+                            border: '#172554'
+                        }
+                    },
+                    fontFamily: {
+                        cyber: ['Orbitron', 'sans-serif'],
+                        mono: ['Share Tech Mono', 'monospace'],
+                        thai: ['Bai Jamjuree', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #030712;
+            background-image: 
+                radial-gradient(rgba(0, 240, 255, 0.08) 1px, transparent 1px),
+                linear-gradient(to right, rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px, 20px 20px, 20px 20px;
+            font-family: 'Bai Jamjuree', sans-serif;
+            overflow-x: hidden;
+        }
+
+        .neon-border-cyan {
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.25), inset 0 0 15px rgba(0, 240, 255, 0.1);
+        }
+
+        .scanlines {
+            background: linear-gradient(
+                rgba(18, 16, 16, 0) 50%, 
+                rgba(0, 0, 0, 0.35) 50%
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+        }
+
+        @keyframes laserScan {
+            0% { top: 0%; opacity: 0.8; }
+            50% { opacity: 0.3; }
+            100% { top: 100%; opacity: 0.8; }
+        }
+
+        .laser-beam {
+            animation: laserScan 2.5s ease-in-out infinite alternate;
+        }
+
+        .hud-corner {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            border-color: #00f0ff;
+            pointer-events: none;
+        }
+        .hud-tl { top: -2px; left: -2px; border-top: 2px solid; border-left: 2px solid; }
+        .hud-tr { top: -2px; right: -2px; border-top: 2px solid; border-right: 2px solid; }
+        .hud-bl { bottom: -2px; left: -2px; border-bottom: 2px solid; border-left: 2px solid; }
+        .hud-br { bottom: -2px; right: -2px; border-bottom: 2px solid; border-right: 2px solid; }
+    </style>
+</head>
+<body class="text-slate-100 min-h-screen flex flex-col justify-between selection:bg-cyan-500 selection:text-black">
+
+    <!-- Top Navigation Bar -->
+    <header class="w-full border-b border-cyber-border bg-cyber-dark/80 backdrop-blur-md px-6 py-3 flex items-center justify-between z-30 sticky top-0">
+        <div class="flex items-center gap-3">
+            <div class="w-3.5 h-3.5 bg-cyber-cyan rotate-45 animate-pulse"></div>
+            <span class="font-cyber font-bold tracking-widest text-lg text-cyber-cyan drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]">CYBERSPOKEN // AR LAB</span>
+            <span class="text-xs font-mono bg-cyber-panel border border-cyber-border text-slate-400 px-2.5 py-0.5 rounded">v2.4.0</span>
+        </div>
+        <div class="flex items-center gap-6 font-mono text-sm">
+            <div class="flex items-center gap-2">
+                <span class="text-slate-400 text-xs">AUDIO INPUT:</span>
+                <span id="mic-status-badge" class="px-2 py-0.5 rounded text-xs bg-slate-800 text-slate-400 border border-slate-700">STANDBY</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-slate-400 text-xs">CAMERA:</span>
+                <span id="cam-status-badge" class="px-2 py-0.5 rounded text-xs bg-slate-800 text-slate-400 border border-slate-700">DISCONNECTED</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Dynamic Workspace -->
+    <main class="flex-1 w-full max-w-7xl mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch relative z-10">
+        
+        <!-- Left Section: Target Word, Buffer & Result -->
+        <section class="lg:col-span-5 flex flex-col justify-between bg-cyber-panel/90 border border-cyber-cyan/30 rounded-2xl p-6 relative neon-border-cyan backdrop-blur-xl">
+            <div class="hud-corner hud-tl"></div>
+            <div class="hud-corner hud-tr"></div>
+            <div class="hud-corner hud-bl"></div>
+            <div class="hud-corner hud-br"></div>
+
+            <div>
+                <div class="flex items-center justify-between border-b border-cyber-border pb-4 mb-6 font-mono">
+                    <div class="flex flex-col">
+                        <span class="text-xs text-cyber-cyan tracking-wider">TARGET NODE</span>
+                        <span id="target-index" class="text-2xl font-bold font-cyber text-white">01<span class="text-slate-500 text-base">/20</span></span>
+                    </div>
+                    <div class="flex flex-col items-end">
+                        <span class="text-xs text-cyber-emerald tracking-wider">SYSTEM SCORE</span>
+                        <span id="system-score" class="text-2xl font-bold font-cyber text-cyber-emerald">0000</span>
+                    </div>
+                </div>
+
+                <!-- 3-Second Buffer Banner -->
+                <div id="status-card-container" class="mb-4">
+                    <div id="countdown-banner" class="w-full bg-slate-900 border border-cyber-cyan/40 rounded-xl p-3 flex items-center justify-between transition-all">
+                        <div class="flex items-center gap-3">
+                            <div id="countdown-pulse" class="w-3 h-3 rounded-full bg-cyber-amber animate-ping"></div>
+                            <span id="countdown-text" class="font-mono text-sm text-cyber-amber tracking-wide">PREPARING BUFFER: <span id="countdown-num" class="font-bold text-lg text-white">3</span>s</span>
+                        </div>
+                        <span id="stage-badge" class="text-xs font-mono uppercase px-2 py-0.5 rounded bg-cyber-amber/20 text-cyber-amber border border-cyber-amber/40">STANDBY</span>
+                    </div>
+                </div>
+
+                <!-- Target Word Center Display -->
+                <div class="bg-cyber-dark/80 border border-cyber-border rounded-xl p-6 text-center relative overflow-hidden my-4 group">
+                    <button id="tts-btn" title="คลิกเพื่อฟังเสียงต้นแบบ" class="absolute top-3 right-3 text-slate-400 hover:text-cyber-cyan transition-colors p-2 rounded-lg bg-cyber-panel/80 border border-cyber-border">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
+                    </button>
+                    <span id="target-category" class="text-[10px] tracking-widest font-mono text-slate-400 uppercase bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700">TECHNICAL TERM</span>
+                    <h1 id="target-word" class="font-cyber font-black text-4xl md:text-5xl text-white tracking-wide mt-3 mb-2 drop-shadow-[0_0_12px_rgba(255,255,255,0.4)]">INITIALIZING</h1>
+                    <p id="target-meaning" class="text-base font-thai text-slate-400 font-light">กำลังเชื่อมต่อฐานข้อมูล...</p>
+                </div>
+
+                <!-- Recognition Result Alert -->
+                <div id="result-box" class="min-h-[76px] flex flex-col justify-center items-center text-center p-3 rounded-xl bg-slate-900/60 border border-dashed border-slate-700 transition-all">
+                    <span id="result-status-title" class="font-cyber font-bold text-lg text-slate-400">READY</span>
+                    <span id="result-user-said" class="font-mono text-xs text-slate-400 mt-1">กด "INITIALIZE LAB SYSTEM" เพื่อเริ่ม</span>
+                </div>
+            </div>
+
+            <!-- Accuracy Meter & Audio Waveform Visualizer -->
+            <div class="mt-4 pt-4 border-t border-cyber-border">
+                <div class="flex justify-between items-center text-xs font-mono mb-2">
+                    <span class="text-slate-400">ACCURACY CALIBRATION</span>
+                    <span id="accuracy-val" class="font-bold text-cyber-cyan text-sm">0%</span>
+                </div>
+                <div class="w-full bg-slate-900 rounded-full h-3 p-0.5 border border-slate-700 overflow-hidden">
+                    <div id="accuracy-bar" class="h-full rounded-full bg-gradient-to-r from-cyber-cyan to-cyber-emerald transition-all duration-300 w-0"></div>
+                </div>
+
+                <div class="flex items-end justify-between h-8 mt-4 gap-1 px-1">
+                    <div class="wave-bar w-full bg-cyber-cyan/30 rounded-t h-1 transition-all"></div>
+                    <div class="wave-bar w-full bg-cyber-cyan/40 rounded-t h-2 transition-all"></div>
+                    <div class="wave-bar w-full bg-cyber-cyan/60 rounded-t h-1 transition-all"></div>
+                    <div class="wave-bar w-full bg-cyber-emerald/50 rounded-t h-3 transition-all"></div>
+                    <div class="wave-bar w-full bg-cyber-cyan/80 rounded-t h-1 transition-all"></div>
+                    <div class="wave-bar w-full bg-cyber-cyan rounded-t h-2 transition-all"></div>
+                    <div class="wave-bar w-full bg-cyber-emerald/60 rounded-t h-1 transition-all"></div>
+                    <div class="wave-bar w-full bg-cyber-cyan/40 rounded-t h-2 transition-all"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Section: AR Camera HUD Stream -->
+        <section class="lg:col-span-7 flex flex-col justify-between bg-cyber-panel/90 border border-cyber-border rounded-2xl p-6 relative overflow-hidden backdrop-blur-xl">
+            <div class="hud-corner hud-tl"></div>
+            <div class="hud-corner hud-tr"></div>
+            <div class="hud-corner hud-bl"></div>
+            <div class="hud-corner hud-br"></div>
+
+            <div class="w-full h-full min-h-[380px] bg-slate-950 rounded-xl relative border border-cyber-border flex items-center justify-center overflow-hidden">
+                <video id="webcam-video" autoplay playsinline muted class="w-full h-full object-cover transform -scale-x-100 absolute inset-0 z-0 opacity-80"></video>
+                <div class="scanlines absolute inset-0 z-10 pointer-events-none"></div>
+
+                <div class="laser-beam absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-cyber-cyan to-transparent shadow-[0_0_12px_#00f0ff] z-20 pointer-events-none"></div>
+
+                <div class="absolute inset-0 z-20 pointer-events-none flex flex-col items-center justify-center p-6">
+                    <div class="w-48 h-56 border border-cyber-cyan/40 rounded-3xl relative flex items-center justify-center">
+                        <div class="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-cyber-cyan"></div>
+                        <div class="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-cyber-cyan"></div>
+                        <div class="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-cyber-cyan"></div>
+                        <div class="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-cyber-cyan"></div>
+                        
+                        <div class="w-8 h-8 rounded-full border border-cyber-emerald/50 flex items-center justify-center animate-spin">
+                            <div class="w-1.5 h-1.5 bg-cyber-emerald rounded-full"></div>
+                        </div>
+                        <span class="absolute -bottom-6 font-mono text-[10px] tracking-widest text-cyber-cyan/70">AR BIOMETRIC TARGET</span>
+                    </div>
+
+                    <div class="absolute top-4 left-4 font-mono text-[11px] text-cyber-cyan space-y-1">
+                        <div>FRAME: 60 FPS</div>
+                        <div>LATENCY: 12ms</div>
+                        <div>ENGINE: WEBRTC / STT</div>
+                    </div>
+                    <div class="absolute bottom-4 right-4 font-mono text-[11px] text-cyber-emerald text-right space-y-1">
+                        <div>AUDIO FILTER: NOISE-CANCEL</div>
+                        <div>MODE: PRONUNCIATION HUD</div>
+                    </div>
+                </div>
+
+                <div id="cam-offline-placeholder" class="z-10 flex flex-col items-center justify-center text-center p-6 bg-slate-950/90 w-full h-full">
+                    <div class="w-20 h-20 rounded-full border-2 border-dashed border-slate-700 flex items-center justify-center text-slate-600 mb-4 animate-pulse">
+                        <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <h3 class="font-cyber text-lg font-bold text-slate-300">CAMERA STANDBY</h3>
+                    <p class="font-thai text-sm text-slate-500 max-w-sm mt-1">กดปุ่มเริ่มระบบเพื่อเปิดกล้องสำหรับแสดงผล AR</p>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between gap-4 mt-4 pt-4 border-t border-cyber-border font-mono">
+                <button id="skip-btn" class="px-4 py-2 rounded-xl border border-slate-700 hover:border-slate-500 bg-slate-900 text-slate-400 hover:text-white text-xs tracking-wider transition-all">
+                    SKIP NODE >>
+                </button>
+                <button id="restart-btn" class="px-4 py-2 rounded-xl border border-slate-700 hover:border-slate-500 bg-slate-900 text-slate-400 hover:text-white text-xs tracking-wider transition-all">
+                    RESTART LAB
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal: Startup Permission Gateway -->
+    <div id="start-modal" class="fixed inset-0 z-50 bg-cyber-dark/95 backdrop-blur-xl flex items-center justify-center p-4">
+        <div class="max-w-md w-full bg-cyber-panel border border-cyber-cyan/50 rounded-2xl p-8 relative neon-border-cyan shadow-2xl">
+            <div class="hud-corner hud-tl"></div>
+            <div class="hud-corner hud-tr"></div>
+            <div class="hud-corner hud-bl"></div>
+            <div class="hud-corner hud-br"></div>
+
+            <div class="text-center">
+                <div class="inline-block p-4 rounded-2xl bg-cyber-dark border border-cyber-cyan/30 mb-4 shadow-[0_0_20px_rgba(0,240,255,0.2)]">
+                    <div class="w-10 h-10 border-2 border-cyber-cyan rounded-lg flex items-center justify-center font-cyber font-black text-cyber-cyan text-xl">
+                        AR
+                    </div>
+                </div>
+                <h2 class="font-cyber text-2xl font-black text-white tracking-wider mb-2">CYBERSPOKEN AR</h2>
+                <p class="text-sm font-thai text-slate-400 mb-6">เกมทดสอบการออกเสียงคำศัพท์เทคโนโลยีภาษาอังกฤษ ผ่านกล้อง AR และระบบ AI</p>
+            </div>
+
+            <div class="space-y-3 font-mono text-xs mb-8 bg-cyber-dark/60 p-4 rounded-xl border border-cyber-border">
+                <div class="flex items-center gap-3">
+                    <span class="w-2 h-2 rounded-full bg-cyber-cyan"></span>
+                    <span class="text-slate-300">ระบบเตรียมตัว 3 วินาที (3... 2... 1...) ก่อนเปิดไมค์</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="w-2 h-2 rounded-full bg-cyber-emerald"></span>
+                    <span class="text-slate-300">ออกเสียงตรงตามคำศัพท์เพื่อสะสมคะแนน</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="w-2 h-2 rounded-full bg-cyber-danger"></span>
+                    <span class="text-slate-300">หากพูดไม่ผ่านหรือหมดเวลา ระบบจะแจ้ง "เสียงคุณไม่ได้"</span>
+                </div>
+            </div>
+
+            <button id="init-system-btn" class="w-full py-4 rounded-xl bg-gradient-to-r from-cyber-cyan to-cyber-emerald text-cyber-dark font-cyber font-black text-base tracking-widest hover:brightness-110 active:scale-95 transition-all shadow-[0_0_20px_rgba(0,240,255,0.4)]">
+                INITIALIZE LAB SYSTEM
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const vocabulary = [
+            { word: "Monitor", ipa: "/ˈmɒn.ɪ.tər/", th: "หน้าจอแสดงผล", cat: "HARDWARE" },
+            { word: "Algorithm", ipa: "/ˈæl.ɡə.rɪ.ðəm/", th: "ขั้นตอนวิธีประมวลผล", cat: "COMPUTER SCIENCE" },
+            { word: "Database", ipa: "/ˈdeɪ.tə.beɪs/", th: "ฐานข้อมูล", cat: "DATA STRUCTURE" },
+            { word: "Cybersecurity", ipa: "/ˌsaɪ.bə.sɪˈkjʊə.rə.ti/", th: "ความปลอดภัยไซเบอร์", cat: "SECURITY" },
+            { word: "Network", ipa: "/ˈnet.wɜːk/", th: "ระบบเครือข่าย", cat: "INFRASTRUCTURE" },
+            { word: "Processor", ipa: "/ˈprəʊ.ses.ər/", th: "หน่วยประมวลผล", cat: "HARDWARE" },
+            { word: "Developer", ipa: "/dɪˈvel.ə.pər/", th: "นักพัฒนาระบบ", cat: "ROLES" },
+            { word: "Hardware", ipa: "/ˈhɑːd.weər/", th: "อุปกรณ์กายภาพ", cat: "COMPONENTS" },
+            { word: "Software", ipa: "/ˈsɒft.weər/", th: "ชุดคำสั่งโปรแกรม", cat: "SYSTEM" },
+            { word: "Keyboard", ipa: "/ˈkiː.bɔːd/", th: "แป้นพิมพ์", cat: "PERIPHERAL" },
+            { word: "Microphone", ipa: "/ˈmaɪ.krə.fəʊn/", th: "อุปกรณ์รับเสียง", cat: "AUDIO" },
+            { word: "Bandwidth", ipa: "/ˈbænd.wɪtθ/", th: "ความจุช่องสัญญาณ", cat: "NETWORK" },
+            { word: "Interface", ipa: "/ˈɪn.tə.feɪs/", th: "ส่วนต่อประสาน", cat: "DESIGN" },
+            { word: "Compiler", ipa: "/kəmˈpaɪ.lər/", th: "โปรแกรมแปลงภาษา", cat: "DEV TOOLS" },
+            { word: "Encryption", ipa: "/ɪnˈkrɪp.ʃən/", th: "การเข้ารหัสลับ", cat: "SECURITY" },
+            { word: "Framework", ipa: "/ˈfreɪm.wɜːk/", th: "กรอบการพัฒนาโค้ด", cat: "PROGRAMMING" },
+            { word: "Resolution", ipa: "/ˌrez.əˈluː.ʃən/", th: "ความละเอียดของจอ", cat: "DISPLAY" },
+            { word: "Storage", ipa: "/ˈstɔː.rɪdʒ/", th: "พื้นที่เก็บข้อมูล", cat: "HARDWARE" },
+            { word: "Variable", ipa: "/ˈveə.ri.ə.bəl/", th: "ตัวแปรในโปรแกรม", cat: "CODING" },
+            { word: "Cloud", ipa: "/klaʊd/", th: "ระบบคลาวด์คอมพิวติง", cat: "INFRASTRUCTURE" }
+        ];
+
+        let currentIndex = 0;
+        let score = 0;
+        let state = "IDLE";
+        let bufferCountdown = 3;
+        let bufferInterval = null;
+        let speechTimeout = null;
+        let recognition = null;
+        let audioCtx = null;
+
+        const startModal = document.getElementById('start-modal');
+        const initBtn = document.getElementById('init-system-btn');
+        const webcamVideo = document.getElementById('webcam-video');
+        const camOffline = document.getElementById('cam-offline-placeholder');
+        const camBadge = document.getElementById('cam-status-badge');
+        const micBadge = document.getElementById('mic-status-badge');
+        const targetIndexEl = document.getElementById('target-index');
+        const scoreEl = document.getElementById('system-score');
+        const countdownBanner = document.getElementById('countdown-banner');
+        const countdownNum = document.getElementById('countdown-num');
+        const countdownText = document.getElementById('countdown-text');
+        const countdownPulse = document.getElementById('countdown-pulse');
+        const stageBadge = document.getElementById('stage-badge');
+        const targetWordEl = document.getElementById('target-word');
+        const targetMeaningEl = document.getElementById('target-meaning');
+        const targetCategoryEl = document.getElementById('target-category');
+        const resultBox = document.getElementById('result-box');
+        const resultTitle = document.getElementById('result-status-title');
+        const resultUserSaid = document.getElementById('result-user-said');
+        const accuracyVal = document.getElementById('accuracy-val');
+        const accuracyBar = document.getElementById('accuracy-bar');
+        const ttsBtn = document.getElementById('tts-btn');
+        const skipBtn = document.getElementById('skip-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const waveBars = document.querySelectorAll('.wave-bar');
+
+        function playSfx(type) {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                const now = audioCtx.currentTime;
+
+                if (type === 'beep') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(800, now);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+                    osc.start(now);
+                    osc.stop(now + 0.12);
+                } else if (type === 'start') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(600, now);
+                    osc.frequency.exponentialRampToValueAtTime(1200, now + 0.2);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                } else if (type === 'success') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523.25, now);
+                    osc.frequency.setValueAtTime(659.25, now + 0.1);
+                    osc.frequency.setValueAtTime(783.99, now + 0.2);
+                    osc.frequency.setValueAtTime(1046.50, now + 0.3);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+                    osc.start(now);
+                    osc.stop(now + 0.6);
+                } else if (type === 'fail') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(250, now);
+                    osc.frequency.exponentialRampToValueAtTime(100, now + 0.35);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+                    osc.start(now);
+                    osc.stop(now + 0.4);
+                }
+            } catch (e) {
+                console.warn(e);
+            }
+        }
+
+        setInterval(() => {
+            if (state === 'LISTENING') {
+                waveBars.forEach(bar => {
+                    bar.style.height = `${Math.floor(Math.random() * 26) + 4}px`;
+                });
+            } else {
+                waveBars.forEach((bar, i) => {
+                    bar.style.height = `${(i % 3 + 1) * 3}px`;
+                });
+            }
+        }, 100);
+
+        function computeAccuracy(s1, s2) {
+            const str1 = (s1 || "").toLowerCase().trim();
+            const str2 = (s2 || "").toLowerCase().trim();
+            if (str1 === str2) return 100;
+            if (!str1 || !str2) return 0;
+
+            const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
+            for (let i = 0; i <= str1.length; i += 1) matrix[0][i] = i;
+            for (let j = 0; j <= str2.length; j += 1) matrix[j][0] = j;
+
+            for (let j = 1; j <= str2.length; j += 1) {
+                for (let i = 1; i <= str1.length; i += 1) {
+                    const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
+                    matrix[j][i] = Math.min(
+                        matrix[j][i - 1] + 1,
+                        matrix[j - 1][i] + 1,
+                        matrix[j - 1][i - 1] + indicator
+                    );
+                }
+            }
+
+            const distance = matrix[str2.length][str1.length];
+            const maxLen = Math.max(str1.length, str2.length);
+            return Math.round(Math.max(0, 100 - (distance / maxLen) * 100));
+        }
+
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }
+                });
+                webcamVideo.srcObject = stream;
+                camOffline.classList.add('hidden');
+                camBadge.textContent = "CONNECTED (AR)";
+                camBadge.className = "px-2 py-0.5 rounded text-xs bg-cyber-emerald/20 text-cyber-emerald border border-cyber-emerald/40";
+                return true;
+            } catch (err) {
+                camBadge.textContent = "ERROR / NO CAM";
+                camBadge.className = "px-2 py-0.5 rounded text-xs bg-cyber-danger/20 text-cyber-danger border border-cyber-danger/40";
+                return false;
+            }
+        }
+
+        function setupSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                alert("เบราว์เซอร์ไม่รองรับ Web Speech API กรุณาใช้ Chrome หรือ Edge");
+                return false;
+            }
+
+            recognition = new SpeechRecognition();
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            recognition.onstart = () => {
+                micBadge.textContent = "RECORDING";
+                micBadge.className = "px-2 py-0.5 rounded text-xs bg-cyber-cyan/20 text-cyber-cyan border border-cyber-cyan/40 animate-pulse";
+            };
+
+            recognition.onresult = (event) => {
+                if (state !== 'LISTENING') return;
+                clearTimeout(speechTimeout);
+                evaluateSpeech(event.results[0][0].transcript);
+            };
+
+            recognition.onend = () => {
+                if (state === 'LISTENING') {
+                    try { recognition.start(); } catch (err) {}
+                } else {
+                    micBadge.textContent = "STANDBY";
+                    micBadge.className = "px-2 py-0.5 rounded text-xs bg-slate-800 text-slate-400 border border-slate-700";
+                }
+            };
+
+            return true;
+        }
+
+        function loadNode(index) {
+            if (index >= vocabulary.length) {
+                renderFinishedScreen();
+                return;
+            }
+
+            currentIndex = index;
+            const currentItem = vocabulary[currentIndex];
+
+            targetIndexEl.innerHTML = `${String(currentIndex + 1).padStart(2, '0')}<span class="text-slate-500 text-base">/${vocabulary.length}</span>`;
+            targetCategoryEl.textContent = currentItem.cat;
+            targetWordEl.textContent = currentItem.word;
+            targetMeaningEl.textContent = `${currentItem.ipa} • ${currentItem.th}`;
+
+            accuracyVal.textContent = "0%";
+            accuracyBar.style.width = "0%";
+            accuracyBar.className = "h-full rounded-full bg-gradient-to-r from-cyber-cyan to-cyber-emerald transition-all duration-300 w-0";
+            resultBox.className = "min-h-[76px] flex flex-col justify-center items-center text-center p-3 rounded-xl bg-slate-900/60 border border-dashed border-slate-700 transition-all";
+            resultTitle.textContent = "READY";
+            resultTitle.className = "font-cyber font-bold text-lg text-slate-400";
+            resultUserSaid.textContent = "เตรียมตัวอ่านคำศัพท์...";
+
+            startCountdownBuffer();
+        }
+
+        function startCountdownBuffer() {
+            state = "COUNTDOWN";
+            try { if (recognition) recognition.stop(); } catch (e) {}
+
+            bufferCountdown = 3;
+            countdownNum.textContent = bufferCountdown;
+            countdownText.innerHTML = `PREPARING BUFFER: <span id="countdown-num" class="font-bold text-lg text-white">${bufferCountdown}</span>s`;
+            countdownBanner.className = "w-full bg-slate-900 border border-cyber-amber/50 rounded-xl p-3 flex items-center justify-between transition-all";
+            countdownPulse.className = "w-3 h-3 rounded-full bg-cyber-amber animate-ping";
+            stageBadge.textContent = "STANDBY (3s)";
+            stageBadge.className = "text-xs font-mono uppercase px-2 py-0.5 rounded bg-cyber-amber/20 text-cyber-amber border border-cyber-amber/40";
+
+            playSfx('beep');
+
+            clearInterval(bufferInterval);
+            bufferInterval = setInterval(() => {
+                bufferCountdown -= 1;
+                if (bufferCountdown > 0) {
+                    countdownNum.textContent = bufferCountdown;
+                    playSfx('beep');
+                } else {
+                    clearInterval(bufferInterval);
+                    activateListeningMode();
+                }
+            }, 1000);
+        }
+
+        function activateListeningMode() {
+            state = "LISTENING";
+            playSfx('start');
+
+            countdownBanner.className = "w-full bg-cyber-cyan/10 border border-cyber-cyan rounded-xl p-3 flex items-center justify-between transition-all shadow-[0_0_15px_rgba(0,240,255,0.2)]";
+            countdownPulse.className = "w-3 h-3 rounded-full bg-cyber-cyan animate-pulse";
+            countdownText.innerHTML = `<span class="font-bold text-cyber-cyan">กำลังฟัง... พูดได้เลย! (SPEAK NOW)</span>`;
+            stageBadge.textContent = "LISTENING";
+            stageBadge.className = "text-xs font-mono uppercase px-2 py-0.5 rounded bg-cyber-cyan/20 text-cyber-cyan border border-cyber-cyan/50";
+
+            resultTitle.textContent = "LISTENING...";
+            resultTitle.className = "font-cyber font-bold text-lg text-cyber-cyan animate-pulse";
+            resultUserSaid.textContent = "ออกเสียงคำศัพท์เป็นภาษาอังกฤษ...";
+
+            try { recognition.start(); } catch (err) {}
+
+            clearTimeout(speechTimeout);
+            speechTimeout = setTimeout(() => {
+                if (state === 'LISTENING') evaluateSpeech("");
+            }, 5500);
+        }
+
+        function evaluateSpeech(spokenText) {
+            state = "EVALUATING";
+            try { recognition.stop(); } catch (e) {}
+
+            const currentTarget = vocabulary[currentIndex].word;
+            const accuracy = computeAccuracy(spokenText, currentTarget);
+
+            accuracyVal.textContent = `${accuracy}%`;
+            accuracyBar.style.width = `${accuracy}%`;
+
+            if (accuracy >= 70) {
+                playSfx('success');
+                score += 100;
+                scoreEl.textContent = String(score).padStart(4, '0');
+
+                confetti({
+                    particleCount: 80,
+                    spread: 70,
+                    origin: { y: 0.6 },
+                    colors: ['#00f0ff', '#00ff9d', '#ffffff']
+                });
+
+                resultBox.className = "min-h-[76px] flex flex-col justify-center items-center text-center p-3 rounded-xl bg-cyber-emerald/10 border border-cyber-emerald shadow-[0_0_15px_rgba(0,255,157,0.2)] transition-all";
+                resultTitle.textContent = "ผ่าน! (PASSED)";
+                resultTitle.className = "font-cyber font-bold text-xl text-cyber-emerald";
+                resultUserSaid.innerHTML = `คุณพูดว่า: <span class="text-white font-bold">"${spokenText}"</span> (ความแม่นยำ ${accuracy}%)`;
+
+                stageBadge.textContent = "EXCELLENT";
+                stageBadge.className = "text-xs font-mono uppercase px-2 py-0.5 rounded bg-cyber-emerald/20 text-cyber-emerald border border-cyber-emerald";
+
+                setTimeout(() => loadNode(currentIndex + 1), 1800);
+            } else {
+                playSfx('fail');
+                accuracyBar.className = "h-full rounded-full bg-cyber-danger transition-all duration-300";
+
+                resultBox.className = "min-h-[76px] flex flex-col justify-center items-center text-center p-3 rounded-xl bg-cyber-danger/10 border border-cyber-danger shadow-[0_0_15px_rgba(255,51,102,0.2)] transition-all";
+                resultTitle.textContent = "เสียงคุณไม่ได้";
+                resultTitle.className = "font-cyber font-bold text-xl text-cyber-danger";
+                
+                if (spokenText.trim()) {
+                    resultUserSaid.innerHTML = `ตรวจจับได้: <span class="text-white font-bold">"${spokenText}"</span> (ไม่ตรงกับคำศัพท์)`;
+                } else {
+                    resultUserSaid.innerHTML = `<span class="text-slate-400">ไม่ได้ยินเสียงพูด หรือเสียงเบาเกินไป</span>`;
+                }
+
+                stageBadge.textContent = "FAILED";
+                stageBadge.className = "text-xs font-mono uppercase px-2 py-0.5 rounded bg-cyber-danger/20 text-cyber-danger border border-cyber-danger";
+
+                setTimeout(() => loadNode(currentIndex + 1), 2000);
+            }
+        }
+
+        function renderFinishedScreen() {
+            state = "FINISHED";
+            try { recognition.stop(); } catch (e) {}
+            webcamVideo.srcObject = null;
+
+            targetWordEl.textContent = "MISSION COMPLETE";
+            targetMeaningEl.textContent = `ทดสอบครบทั้ง 20 คำศัพท์แล้ว • คะแนนรวม: ${score}`;
+            resultTitle.textContent = "COMPLETED";
+            resultTitle.className = "font-cyber font-bold text-2xl text-cyber-cyan";
+            resultUserSaid.textContent = "กดปุ่ม RESTART เพื่อเริ่มรอบใหม่";
+        }
+
+        ttsBtn.addEventListener('click', () => {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(vocabulary[currentIndex].word);
+                utterance.lang = 'en-US';
+                utterance.rate = 0.9;
+                window.speechSynthesis.speak(utterance);
+            }
+        });
+
+        skipBtn.addEventListener('click', () => {
+            clearInterval(bufferInterval);
+            clearTimeout(speechTimeout);
+            loadNode(currentIndex + 1);
+        });
+
+        restartBtn.addEventListener('click', () => {
+            score = 0;
+            scoreEl.textContent = "0000";
+            loadNode(0);
+        });
+
+        initBtn.addEventListener('click', async () => {
+            startModal.classList.add('hidden');
+            await initCamera();
+            setupSpeechRecognition();
+            loadNode(0);
+        });
+    </script>
+</body>
+</html>
